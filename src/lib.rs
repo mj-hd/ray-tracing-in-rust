@@ -86,6 +86,13 @@ impl ops::BitAnd<Vector3> for Vector3 {
     }
 }
 
+impl ops::Neg for Vector3 {
+    type Output = Vector3;
+    fn neg(self) -> Vector3 {
+        Vector3::new(self.x * -1.0, self.y * -1.0, self.z * -1.0)
+    }
+}
+
 struct Base {
     u: Vector3,
     v: Vector3,
@@ -154,6 +161,13 @@ impl ops::Mul<f64> for Color {
     type Output = Color;
     fn mul(self, rhs: f64) -> Color {
         Color { red: self.red * rhs, green: self.green * rhs, blue: self.blue * rhs }
+    }
+}
+
+impl ops::Mul<Color> for Color {
+    type Output = Color;
+    fn mul(self, rhs: Color) -> Color {
+        Color { red: self.red * rhs.red, green: self.green * rhs.green, blue: self.blue * rhs.blue }
     }
 }
 
@@ -284,7 +298,9 @@ impl Reflectable for Specular {
     }
 }
 
-struct Scatter {}
+struct Scatter {
+    color: Color,
+}
 
 impl Reflectable for Scatter {
     fn reflect(&self, scene: &Scene, rng: &mut rand::rngs::StdRng, hit: Hit, n: i32) -> Vec<Color> {
@@ -299,7 +315,36 @@ impl Reflectable for Scatter {
             dir: hit.norm + random,
         };
 
-        vec![scene.trace(rng, ray, n) * 0.8]
+        vec![self.color * scene.trace(rng, ray, n) * 0.8]
+    }
+}
+
+struct Glass {
+    ratio: f64,
+}
+
+impl Reflectable for Glass {
+    fn reflect(&self, scene: &Scene, rng: &mut rand::rngs::StdRng, hit: Hit, n: i32) -> Vec<Color> {
+        let b = hit.norm * (hit.ray.dir.unit() & hit.norm);
+        let reflected = (hit.ray.dir.unit() - b * 2.0).unit();
+
+        let norm = if hit.ray.dir & hit.norm > 0.0 { -hit.norm } else { hit.norm };
+        let ratio = if hit.ray.dir & hit.norm > 0.0 { self.ratio } else { 1.0 / self.ratio };
+        let dir = -hit.ray.dir.unit();
+
+        let dt = dir & norm;
+        let d = 1.0 - ratio.powf(2.0) * (1.0 - dt.powf(2.0));
+
+        let mut ray = Ray {
+            pos: hit.pos,
+            dir: reflected,
+        };
+
+        if d > 0.0 {
+            ray.dir = (dir - hit.norm * dt) * -ratio - hit.norm * d.sqrt();
+        }
+
+        vec![scene.trace(rng, ray, n+1)]
     }
 }
 
@@ -404,25 +449,36 @@ pub fn run() {
             Vector3::new(0.0, 0.75, 0.0),
             Vector3::new(-0.5, -0.375, -0.5),
         ),
-        20,
+        10,
         0.0001,
         std::f64::INFINITY,
     );
 
     let sphere1 = Sphere {
-        pos: Vector3::new(0.0, -0.5, -2.0),
+        pos: Vector3::new(0.5, -0.5, -2.0),
+        radius: 0.5,
+        material: Box::new(Glass {
+            ratio: 2.0,
+        }),
+    };
+
+    let sphere2 = Sphere {
+        pos: Vector3::new(-0.5, -0.5, -2.0),
         radius: 0.5,
         material: Box::new(Specular {}),
     };
 
-    let sphere2 = Sphere {
+    let sphere3 = Sphere {
         pos: Vector3::new(0.0, 6.0, -2.0),
         radius: 6.0,
-        material: Box::new(Scatter {}),
+        material: Box::new(Scatter {
+            color: Color { red: 0.8, green: 0.8, blue: 0.0 },
+        }),
     };
 
     scene.objects.push(Box::new(sphere1));
     scene.objects.push(Box::new(sphere2));
+    scene.objects.push(Box::new(sphere3));
 
     scene.render_to(context, &mut rng, 640, 480);
 }
