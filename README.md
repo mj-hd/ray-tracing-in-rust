@@ -1,3 +1,9 @@
+## ray-tracing-in-rust
+
+ray-tracing simulator by Rust and wasm.
+
+![screenshot](https://user-images.githubusercontent.com/6854255/87242473-e7ed8500-c467-11ea-9b6b-533dd592f203.png)
+
 ## How to install
 
 ```sh
